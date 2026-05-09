@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: public.ecr.aws/docker/library/postgres:16
+    container_name: traffic-postgres
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-traffic}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-traffic}"
+      POSTGRES_DB: "${POSTGRES_DB:-traffic_analysis}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - traffic_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-traffic} -d ${POSTGRES_DB:-traffic_analysis}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  rabbitmq:
+    image: public.ecr.aws/docker/library/rabbitmq:3.13-management
+    container_name: traffic-rabbitmq
+    hostname: traffic-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_DEFAULT_USER:-traffic}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_DEFAULT_PASS:-traffic}"
+      RABBITMQ_DEFAULT_VHOST: "${RABBITMQ_DEFAULT_VHOST:-/}"
+      RABBITMQ_ERLANG_COOKIE: "${RABBITMQ_ERLANG_COOKIE:-traffic-rabbitmq-cookie}"
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - ../.docker-data/rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  traffic-go:
+    build: ..
+    container_name: traffic-go
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-9010}:9010"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  traffic_pg_data:
