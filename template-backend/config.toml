@@ -1,0 +1,32 @@
+[web]
+host  = "0.0.0.0"
+port  = 8090
+debug = true
+
+[db]
+driver   = "mysql"
+host     = "127.0.0.1"
+port     = 3306
+user     = "root"
+password = "123456"
+database = "my_biz"
+
+[cache]
+# host = "127.0.0.1"
+# port = 6379
+# password = ""
+# db = 0
+# prefix = "mybiz:"
+
+[iam]
+base_url      = "http://localhost:8080"
+client_id     = ""
+client_secret = ""
+path_prefix   = ""
+
+[sso]
+# callback_uri 必须与 IAM 后台配置的回调地址一致
+callback_uri             = "http://localhost:8090/callback"
+success_redirect         = "http://localhost:8090/auth/sso-callback"
+cookie_secret            = "at-least-16-bytes-secret-key!!"
+token_relay_callback_uri = "http://localhost:8090/callback"

@@ -1,20 +1,23 @@
-FROM public.ecr.aws/docker/library/golang:1.25 AS builder
+FROM golang:1.26-alpine AS builder
 
-ENV CGO_ENABLED=0
-ENV GOOS=linux
-ENV GOARCH=amd64
+WORKDIR /build
 
-WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY . .
+RUN CGO_ENABLED=0 go build -ldflags "-X my-biz-backend/boot.BuildTime=$(date '+%Y-%m-%d %H:%M:%S')" -o server ./cmd/server
 
-RUN go build -mod=vendor -o /out/traffic-api ./cmd/traffic-api
-RUN go build -mod=vendor -o /out/traffic-admin ./cmd/traffic-admin
+FROM alpine:latest
 
-FROM scratch
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /out/traffic-api /traffic-api
-COPY --from=builder /out/traffic-admin /traffic-admin
+RUN apk --no-cache add ca-certificates tzdata
+ENV TZ=Asia/Shanghai
 
-EXPOSE 9010
-ENTRYPOINT ["/traffic-api"]
+WORKDIR /app
+
+COPY --from=builder /build/server .
+COPY --from=builder /build/config.toml .
+
+EXPOSE 8090
+
+CMD ["./server"]

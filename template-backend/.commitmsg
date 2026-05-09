@@ -1,0 +1,6 @@
+feat: 升级SDK路径和依赖版本
+
+- iam-sdk → sdk v1.1.0（路径迁移 + 版本升级）
+- core → core/v2 v2.0.0
+- cache/redis、db、product、web → v0.1.0
+- 移除所有本地replace指令

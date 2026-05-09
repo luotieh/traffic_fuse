@@ -1,9 +1,8 @@
 node_modules
-traffic-api
-traffic-api-*
-traffic-api.exe
 .DS_Store
 dist
+!template-backend/frontend/
+!template-backend/frontend/dist/
 !template-backend/frontend/dist/.gitkeep
 dist-ssr
 dist.zip

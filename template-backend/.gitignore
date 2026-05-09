@@ -1,6 +1,11 @@
-
-# generated compatibility reports
-reports/
-.docker-data/
+bin/
+*.exe
+*.test
+*.prof
 .env
-.docker-data/**
+config/config.local.toml
+.idea
+
+# 前端构建产物（由前端 build 直接输出到此目录）
+frontend/dist/*
+!frontend/dist/.gitkeep
