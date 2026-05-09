@@ -16,6 +16,7 @@ const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
     meta: {
+      hideInMenu: true,
       icon: 'lucide:layout-dashboard',
       order: 1,
       title: '示例模块',

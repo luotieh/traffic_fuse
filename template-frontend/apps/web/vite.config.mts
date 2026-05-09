@@ -1,4 +1,4 @@
-import { defineConfig } from '@vben/vite-config';
+import { defineConfig } from "@vben/vite-config";
 
 export default defineConfig(async () => {
   return {
@@ -10,15 +10,20 @@ export default defineConfig(async () => {
       build: {
         // ★ 直接输出到后端 embed 目录，部署时一个二进制即可
         // 请根据实际后端目录名修改路径，如：'../../../my-biz-backend/frontend/dist'
-        outDir: '../../../template-backend/frontend/dist',
+        outDir: "../../../template-backend/frontend/dist",
         emptyOutDir: true,
       },
       server: {
         host: false,
         proxy: {
-          '/api': {
+          "/api": {
             changeOrigin: true,
-            target: 'http://127.0.0.1:8080',
+            target: "http://10.20.30.113:9010",
+            ws: true,
+          },
+          "/deepflow-api": {
+            changeOrigin: true,
+            target: "http://10.20.30.113:9010",
             ws: true,
           },
         },
