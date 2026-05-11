@@ -1,4 +1,4 @@
-const DEEPFLOW_BASE_URL = '/deepflow-api';
+const DEEPFLOW_BASE_URL = '/api';
 
 interface DeepflowRequestOptions extends RequestInit {
   params?: Record<string, any>;
@@ -25,6 +25,7 @@ async function parseResponse(response: Response) {
 
   if (data?.code !== undefined) {
     if (data.code !== 200) throw new Error(data.message || 'Request failed');
+    if (data.access_token !== undefined) return data;
     return data.data;
   }
 
@@ -32,6 +33,7 @@ async function parseResponse(response: Response) {
     if (data.status !== 'success') {
       throw new Error(data.message || 'Request failed');
     }
+    if (data.access_token !== undefined) return data;
     return data.data !== undefined ? data.data : data;
   }
 
@@ -81,7 +83,11 @@ export function deepflowPut<T = any>(url: string, data?: Record<string, any>) {
 }
 
 export function deepflowLogin(data: { password: string; username: string }) {
-  return deepflowPost<{ access_token?: string; user?: Record<string, any> }>(
+  return deepflowPost<{
+    access_token?: string;
+    data?: Record<string, any>;
+    user?: Record<string, any>;
+  }>(
     '/auth/login',
     data,
   );

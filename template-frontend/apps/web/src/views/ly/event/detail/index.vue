@@ -1,18 +1,11 @@
 <script lang="ts" setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
   NButton,
-  NCard,
-  NDescriptions,
-  NDescriptionsItem,
-  NFlex,
-  NGrid,
-  NGridItem,
   NSpace,
-  NStatistic,
-  NTag,
+  NSwitch,
 } from 'naive-ui';
 
 import {
@@ -27,11 +20,10 @@ import { useDeepflowStore } from '#/store';
 import {
   formatDeepflowDate,
   mapSeverityToDisplay,
-  mapSeverityToTagType,
 } from '#/utils/deepflow';
+import deepflowSocket from '#/utils/deepflow-socket';
 
 import ChatBox from './components/ChatBox.vue';
-import CountProgress from './components/CountProgress.vue';
 import DetailsDialog from './components/DetailsDialog.vue';
 import ListDrawer from './components/ListDrawer.vue';
 
@@ -46,7 +38,7 @@ const isAiFlag = ref(true);
 const dialogVisible = ref(false);
 const drawerVisible = ref(false);
 const activeTab = ref<'context' | 'original' | 'summary'>('original');
-const wsConnectionStatus = ref('轮询中');
+const wsConnectionStatus = ref<'connected' | 'connecting' | 'disconnected'>('disconnected');
 const detail = ref<Record<string, any>>({});
 const eventCount = ref({ action_count: 0, command_count: 0, task_count: 0 });
 const dialogData = ref({ contentInfo: '', rawInfo: '', sumInfo: '' });
@@ -62,36 +54,99 @@ const severityText = computed(() => mapSeverityToDisplay(detail.value?.severity)
 const createdAtText = computed(() =>
   formatDeepflowDate(detail.value?.created_at) || String(route.query.occurrence_time || '-'),
 );
+const eventTitle = computed(() => {
+  const type = String(route.query.event_type || detail.value?.event_type || detail.value?.event_name || '安全事件');
+  const source = String(route.query.threat_source || detail.value?.threat_source || '');
+  if (source) return `发现与${source}的通讯行为 (${type})`;
+  return detail.value?.event_name || type;
+});
+const eventSource = computed(() => String(detail.value?.source || route.query.source || 'FlowShadow'));
+const eventLevelText = computed(() => String(route.query.event_level || severityText.value || '-'));
+const currentRound = computed(() => Number(detail.value?.current_round || 1));
+const wsStatusClass = computed(() => `is-${wsConnectionStatus.value}`);
+const wsStatusText = computed(() => {
+  if (wsConnectionStatus.value === 'connected') return '已连接';
+  if (wsConnectionStatus.value === 'connecting') return '连接中';
+  return '未连接';
+});
+const eventContext = computed(() => ({
+  event_level: eventLevelText.value,
+  event_type: route.query.event_type || detail.value?.event_name || '安全事件',
+  occurrence_time: createdAtText.value,
+  rule_desc: route.query.rule_desc || detail.value?.message || '',
+  threat_source: route.query.threat_source || detail.value?.threat_source || '',
+  victim_target: route.query.victim_target || detail.value?.victim_target || '',
+}));
+
+function formatSummaryData(res: any) {
+  const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+  if (list.length > 0) {
+    return list
+      .map((item: Record<string, any>, index: number) => {
+        const title = `第 ${item.round_id || index + 1} 轮总结`;
+        const time = formatDeepflowDate(item.updated_at || item.created_at);
+        return [`【${title}】`, time ? `时间：${time}` : '', item.event_summary || '暂无总结内容']
+          .filter(Boolean)
+          .join('\n');
+      })
+      .join('\n\n');
+  }
+
+  if (typeof res === 'string') return res;
+  if (res?.event_summary) return String(res.event_summary);
+  if (res?.data?.event_summary) return String(res.data.event_summary);
+  return '';
+}
 
 async function getDetails() {
   if (!eventId.value) return;
-  const [detailRes, statsRes] = await Promise.all([
-    deepflowGetEventDetail(eventId.value),
-    deepflowGetEventStats(eventId.value),
-  ]);
-  detail.value = detailRes || {};
-  eventCount.value = {
-    action_count: Number(statsRes?.action_count || 0),
-    command_count: Number(statsRes?.command_count || 0),
-    task_count: Number(statsRes?.task_count || 0),
-  };
+  try {
+    const [detailRes, statsRes] = await Promise.all([
+      deepflowGetEventDetail(eventId.value),
+      deepflowGetEventStats(eventId.value),
+    ]);
+    detail.value = detailRes || {};
+    eventCount.value = {
+      action_count: Number(statsRes?.action_count || 0),
+      command_count: Number(statsRes?.command_count || 0),
+      task_count: Number(statsRes?.task_count || 0),
+    };
+  } catch {
+    detail.value = {
+      current_round: currentRound.value || 1,
+      event_name: eventTitle.value,
+      id: eventId.value,
+      severity: route.query.event_level || 'high',
+      source: eventSource.value,
+    };
+    eventCount.value = { action_count: 0, command_count: 0, task_count: 0 };
+  }
 }
 
 async function getTable() {
-  const res = await deepflowGetEvents();
-  tableData.value = Array.isArray(res) ? res : [];
+  try {
+    const res = await deepflowGetEvents();
+    tableData.value = Array.isArray(res) ? res : [];
+  } catch {
+    tableData.value = [];
+  }
 }
 
 async function loadSummary() {
   if (!eventId.value) return;
-  const res = await deepflowGetEventSummary(eventId.value);
+  let res: any = '';
+  try {
+    res = await deepflowGetEventSummary(eventId.value);
+  } catch {
+    res = route.query.rule_desc || detail.value?.message || '暂无远程总结数据';
+  }
   dialogData.value = {
     rawInfo: String(detail.value?.message || route.query.rule_desc || ''),
     contentInfo:
       String(detail.value?.context || '') ||
       `威胁来源：${String(route.query.threat_source || '-')}` +
         `\n受害目标：${String(route.query.victim_target || '-')}`,
-    sumInfo: Array.isArray(res) ? res.join('\n') : String(res || ''),
+    sumInfo: formatSummaryData(res),
   };
 }
 
@@ -116,15 +171,32 @@ async function applyRouteState() {
   }
 }
 
-async function toggleMode() {
-  const next = !isAiFlag.value;
-  isAiFlag.value = next;
+async function setAiMode(enabled: boolean) {
+  isAiFlag.value = enabled;
   try {
-    await deepflowSwitchDrivingMode({ mode: next ? 'auto' : 'manual' });
+    await deepflowSwitchDrivingMode({ enabled, mode: enabled ? 'auto' : 'manual' });
   } catch (error) {
-    isAiFlag.value = !next;
+    isAiFlag.value = !enabled;
     message.error(error instanceof Error ? error.message : '切换驾驶模式失败');
   }
+}
+
+function updateWSStatus(status: 'connected' | 'connecting' | 'disconnected') {
+  wsConnectionStatus.value = status;
+}
+
+function syncSocketStatus() {
+  if (deepflowSocket.status === 'connected' || deepflowSocket.connected) {
+    updateWSStatus('connected');
+    return;
+  }
+
+  if (deepflowSocket.status === 'connecting') {
+    updateWSStatus('connecting');
+    return;
+  }
+
+  updateWSStatus('disconnected');
 }
 
 function openDrawer() {
@@ -146,21 +218,43 @@ function handleDrawerEventClick(event: Record<string, any>) {
 }
 
 onMounted(async () => {
+  const queryToken = route.query.deepsoc_token;
   try {
-    const queryToken = route.query.deepsoc_token;
-    if (queryToken) {
-      deepflowStore.useToken(String(queryToken));
-    } else {
-      await deepflowStore.ensureToken();
-    }
-    await applyRouteState();
-    if (route.query.open_chat === '1') {
-      await nextTick();
-      document.querySelector('.chat-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    if (queryToken) deepflowStore.useToken(String(queryToken));
+    else await deepflowStore.ensureToken();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'DeepFlow 初始化失败');
+    console.error('[DeepFlow] 自动登录失败:', error);
   }
+
+  await applyRouteState();
+  if (route.query.open_chat === '1') {
+    await nextTick();
+    document.querySelector('.chat-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  deepflowSocket.on('connected', handleSocketConnected);
+  deepflowSocket.on('disconnected', handleSocketDisconnected);
+  deepflowSocket.on('error', handleSocketError);
+  syncSocketStatus();
+  deepflowSocket.connect();
+  syncSocketStatus();
+});
+
+function handleSocketConnected() {
+  updateWSStatus('connected');
+}
+
+function handleSocketDisconnected() {
+  updateWSStatus('disconnected');
+}
+
+function handleSocketError() {
+  updateWSStatus('disconnected');
+}
+
+onUnmounted(() => {
+  deepflowSocket.off('connected', handleSocketConnected);
+  deepflowSocket.off('disconnected', handleSocketDisconnected);
+  deepflowSocket.off('error', handleSocketError);
 });
 
 watch(
@@ -173,85 +267,86 @@ watch(
 
 <template>
   <div class="ly-detail-page">
-    <NCard size="small">
-      <template #header>
-        <div class="title-row">
-          <span>AI安全事件研判</span>
-          <NSpace>
-            <NTag size="small" type="info">{{ wsConnectionStatus }}</NTag>
-            <NTag size="small" type="warning">处理中</NTag>
-          </NSpace>
-        </div>
-      </template>
-      <template #header-extra>
-        <NSpace>
-          <NButton @click="openDrawer">事件列表</NButton>
-          <NButton @click="openDetailModal">详情</NButton>
-          <NButton @click="router.push('/ly/event/list')">退出</NButton>
-        </NSpace>
-      </template>
+    <header class="detail-header">
+      <h1>AI安全事件研判</h1>
+      <NSpace align="center" :size="10">
+        <span :class="['status-pill', 'connection-pill', wsStatusClass]">
+          <span class="status-dot"></span>
+          {{ wsStatusText }}
+        </span>
+        <span class="status-pill processing-pill">处理中</span>
+        <NButton round size="small" type="primary" secondary @click="openDetailModal">详情</NButton>
+      </NSpace>
+    </header>
 
-      <div class="layout-grid">
-        <div class="left-panel">
-          <NCard size="small" title="事件概览">
-            <NDescriptions bordered label-placement="left" :column="1">
-              <NDescriptionsItem label="事件名称">{{ detail.event_name || 'AI助手' }}</NDescriptionsItem>
-              <NDescriptionsItem label="ID">{{ detail.id || eventId || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="轮次">{{ detail.current_round || 1 }}</NDescriptionsItem>
-              <NDescriptionsItem label="来源">{{ detail.source || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="严重程度">
-                <NTag :type="mapSeverityToTagType(detail.severity)">{{ severityText }}</NTag>
-              </NDescriptionsItem>
-              <NDescriptionsItem label="创建时间">{{ createdAtText }}</NDescriptionsItem>
-            </NDescriptions>
-          </NCard>
-          <div class="chat-box"><ChatBox :event-id="eventId" /></div>
+    <div class="workbench">
+      <aside class="summary-panel">
+        <div class="ai-badge">AI</div>
+        <h2>{{ eventTitle }}</h2>
+        <p>{{ createdAtText }}</p>
+        <div class="summary-fields">
+          <div>ID：{{ eventId || '-' }}</div>
+          <div>轮次：{{ currentRound }}</div>
+          <div>来源：{{ eventSource }}</div>
+          <div>严重程度：{{ eventLevelText }}</div>
+          <div>创建时间：{{ createdAtText }}</div>
+        </div>
+        <NButton class="event-list-button" secondary type="primary" @click="openDrawer">
+          ☰ 事件列表
+        </NButton>
+      </aside>
+
+      <main class="chat-panel">
+        <div class="chat-box">
+          <ChatBox :event-id="eventId" :event-context="eventContext" />
+        </div>
+      </main>
+
+      <aside class="status-panel">
+        <div class="status-title">
+          <h2>事件状态</h2>
+          <span :class="['status-pill', 'connection-pill', 'status-pill-compact', wsStatusClass]">
+            <span class="status-dot"></span>
+            {{ wsStatusText }}
+          </span>
+        </div>
+        <div class="metric-list">
+          <div class="metric-card metric-green">
+            <span class="metric-icon">↺</span>
+            <span>当前轮次</span>
+            <strong>{{ currentRound }}</strong>
+          </div>
+          <div class="metric-card metric-orange">
+            <span class="metric-icon">▣</span>
+            <span>任务数</span>
+            <strong>{{ eventCount.task_count }}</strong>
+          </div>
+          <div class="metric-card metric-pink">
+            <span class="metric-icon">⌁</span>
+            <span>动作数</span>
+            <strong>{{ eventCount.action_count }}</strong>
+          </div>
+          <div class="metric-card metric-blue">
+            <span class="metric-icon">◉</span>
+            <span>指令数</span>
+            <strong>{{ eventCount.command_count }}</strong>
+          </div>
         </div>
 
-        <div class="right-panel">
-          <NCard size="small" title="事件状态">
-            <NGrid :cols="1" :y-gap="12">
-              <NGridItem>
-                <div class="status-card status-green">
-                  <div>
-                    <div class="status-label">当前轮次</div>
-                    <div class="status-value">{{ detail.current_round || 1 }}</div>
-                  </div>
-                  <CountProgress :dot-count="Number(detail.current_round || 1)" />
-                </div>
-              </NGridItem>
-              <NGridItem>
-                <div class="status-card status-orange">
-                  <NStatistic label="任务数" :value="eventCount.task_count" />
-                  <CountProgress :dot-count="eventCount.task_count" start-color="#f2e2c0" end-color="#ff9900" />
-                </div>
-              </NGridItem>
-              <NGridItem>
-                <div class="status-card status-pink">
-                  <NStatistic label="动作数" :value="eventCount.action_count" />
-                  <CountProgress :dot-count="eventCount.action_count" start-color="#edd0e3" end-color="#f86886" />
-                </div>
-              </NGridItem>
-              <NGridItem>
-                <div class="status-card status-blue">
-                  <NStatistic label="指令数" :value="eventCount.command_count" />
-                  <CountProgress :dot-count="eventCount.command_count" start-color="#c5d7f7" end-color="#467cf9" />
-                </div>
-              </NGridItem>
-            </NGrid>
-          </NCard>
-
-          <NCard size="small" title="驾驶模式">
-            <NFlex justify="space-between" align="center">
-              <span>{{ isAiFlag ? 'AI智能' : '人工操控' }}</span>
-              <NButton type="primary" secondary @click="toggleMode">
-                切换为{{ isAiFlag ? '人工操控' : 'AI智能' }}
-              </NButton>
-            </NFlex>
-          </NCard>
+        <div class="side-action">
+          <span>ai智能</span>
+          <NSwitch :value="isAiFlag" @update:value="setAiMode" />
         </div>
-      </div>
-    </NCard>
+        <button class="plain-action" type="button" @click="openDetailModal">
+          <span>设置</span>
+          <span>⚙</span>
+        </button>
+        <button class="plain-action" type="button" @click="router.push('/ly/event/list')">
+          <span>退出</span>
+          <span>↩</span>
+        </button>
+      </aside>
+    </div>
 
     <DetailsDialog v-model:visible="dialogVisible" title="事件详情" :show-footer="false">
       <div class="dialog-content">
@@ -284,45 +379,217 @@ watch(
 
 <style scoped>
 .ly-detail-page {
-  padding: 12px;
+  background: #dff8ff;
+  color: #18376d;
+  height: calc(100vh - 52px);
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px 16px;
 }
-.title-row {
+.detail-header {
   align-items: center;
   display: flex;
-  gap: 12px;
+  height: 34px;
+  justify-content: space-between;
+  padding: 0 8px;
 }
-.layout-grid {
+.detail-header h1 {
+  color: #173b82;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+.status-pill {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  height: 24px;
+  justify-content: center;
+  line-height: 1;
+  min-width: 66px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+.connection-pill.is-connected {
+  background: #effcf4;
+  border-color: #86e2a6;
+  color: #06a647;
+}
+.connection-pill.is-connecting {
+  background: #fff8e8;
+  border-color: #f5c96a;
+  color: #d98500;
+}
+.connection-pill.is-disconnected {
+  background: #f8fafc;
+  border-color: #b7c2d0;
+  color: #637083;
+}
+.status-dot {
+  background: currentColor;
+  border-radius: 50%;
+  flex: 0 0 8px;
+  height: 8px;
+  width: 8px;
+}
+.processing-pill {
+  background: #fff8e8;
+  border-color: #f5c96a;
+  color: #d98500;
+}
+.status-pill-compact {
+  height: 22px;
+  min-width: 70px;
+  padding: 0 10px;
+}
+.workbench {
+  background: #f4f8ff;
+  border: 1px solid #cfe3f5;
+  border-radius: 12px;
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  grid-template-columns: 320px minmax(640px, 1fr) 300px;
+  height: calc(100% - 42px);
+  overflow: hidden;
 }
-.left-panel,
-.right-panel {
+.summary-panel {
+  background: #f3f7fc;
+  border-right: 1px solid #d6e4f7;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  padding: 12px;
+  position: relative;
 }
-.chat-box {
-  min-height: 560px;
+.ai-badge {
+  align-items: center;
+  align-self: center;
+  background: linear-gradient(135deg, #4c76ff, #6677ff);
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  font-size: 14px;
+  font-weight: 700;
+  height: 36px;
+  justify-content: center;
+  margin-top: 10px;
+  width: 36px;
 }
-.status-card {
-  border-radius: 12px;
+.summary-panel h2 {
+  color: #1d3b73;
+  font-size: 17px;
+  line-height: 1.5;
+  margin: 12px 0 10px;
+  text-align: center;
+}
+.summary-panel p {
+  color: #59729f;
+  font-size: 12px;
+  margin: 0 0 12px;
+  text-align: center;
+}
+.summary-fields {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px;
 }
-.status-green { background: rgba(30, 154, 126, 0.08); }
-.status-orange { background: rgba(255, 153, 0, 0.08); }
-.status-pink { background: rgba(248, 104, 134, 0.08); }
-.status-blue { background: rgba(70, 124, 249, 0.08); }
-.status-label {
-  color: #666;
+.summary-fields div {
+  background: #fff;
+  border: 1px solid #cfdcf0;
+  border-radius: 6px;
+  color: #213d6d;
   font-size: 13px;
+  padding: 8px 10px;
+  text-align: center;
 }
-.status-value {
-  font-size: 24px;
-  font-weight: 700;
+.event-list-button {
+  align-self: center;
+  bottom: 140px;
+  box-shadow: 0 10px 22px rgba(35, 75, 130, 0.14);
+  min-width: 160px;
+  position: absolute;
+}
+.chat-panel {
+  background: #f4f8ff;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+.chat-box {
+  height: 100%;
+}
+.status-panel {
+  background: #f2f6fc;
+  border-left: 1px solid #d6e4f7;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 12px;
+}
+.status-title {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+.status-title h2 {
+  color: #173b82;
+  font-size: 16px;
+  margin: 0;
+}
+.metric-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.metric-card {
+  align-items: center;
+  background: #fff;
+  border-radius: 12px;
+  color: #1c3768;
+  display: grid;
+  font-size: 14px;
+  grid-template-columns: 44px 1fr auto;
+  min-height: 64px;
+  padding: 0 18px;
+}
+.metric-card strong {
+  font-size: 18px;
+}
+.metric-icon {
+  align-items: center;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  font-size: 14px;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+.metric-green .metric-icon { background: #50d28d; }
+.metric-orange .metric-icon { background: #ff9e2d; }
+.metric-pink .metric-icon { background: #ff6f96; }
+.metric-blue .metric-icon { background: #557cff; }
+.side-action,
+.plain-action {
+  align-items: center;
+  background: #fff;
+  border: 0;
+  border-radius: 10px;
+  color: #1c3768;
+  display: flex;
+  font-size: 14px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 16px;
+  text-align: left;
+  width: 100%;
+}
+.plain-action {
+  cursor: pointer;
 }
 .dialog-content {
   min-height: 320px;
@@ -344,5 +611,33 @@ watch(
 .tab-panel pre {
   margin: 0;
   white-space: pre-wrap;
+}
+
+@media (max-width: 1280px) {
+  .workbench {
+    grid-template-columns: 280px minmax(520px, 1fr) 260px;
+  }
+}
+
+@media (max-width: 980px) {
+  .ly-detail-page {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .workbench {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .summary-panel,
+  .status-panel {
+    min-height: 280px;
+  }
+  .event-list-button {
+    bottom: 24px;
+  }
+  .chat-box {
+    height: 640px;
+  }
 }
 </style>

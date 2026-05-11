@@ -68,29 +68,30 @@ async function openAiDetail(row: Record<string, any>) {
     threat_source: row.attackDevice || '',
     victim_target: row.victimDevice || '',
   };
+  const eventId = String(row.id);
+  let token = '';
+  let deepflowEventId = '';
   try {
     const res = await lyEventPushToAi(payload);
-    const deepflowEventId = String(res?.deepsoc_event_id || row.id);
-    const token = String(res?.deepsoc_token || '');
-    router.push({
-      path: '/ly/event/detail',
-      query: {
-        ...payload,
-        deepsoc_event_id: deepflowEventId,
-        event_id: deepflowEventId,
-        open_chat: '1',
-        ...(token ? { deepsoc_token: token } : {}),
-      },
-    });
+    const data = res?.data && typeof res.data === 'object' ? res.data : res;
+    deepflowEventId = String(data?.deepsoc_event_id || data?.event_id || '');
+    token = String(data?.deepsoc_token || data?.access_token || data?.token || '');
   } catch {
-    message.warning('AI分析中间层不可用，已进入占位页');
-    router.push({
-      path: '/ly/event/detail',
-      query: { ...payload, event_id: String(row.id), open_chat: '1' },
-    });
+    message.warning('AI分析中间层不可用，已回退到本地详情');
   } finally {
     state.aiLoadingId = '';
   }
+
+  router.push({
+    path: '/ly/event/detail',
+    query: {
+      ...payload,
+      deepsoc_event_id: deepflowEventId || eventId,
+      event_id: deepflowEventId || eventId,
+      open_chat: '1',
+      ...(token ? { deepsoc_token: token } : {}),
+    },
+  });
 }
 
 const columns = [

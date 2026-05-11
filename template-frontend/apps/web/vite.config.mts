@@ -21,7 +21,17 @@ export default defineConfig(async () => {
             target: "http://10.20.30.113:9010",
             ws: true,
           },
-          "/deepflow-api": {
+          "/d": {
+            changeOrigin: true,
+            target: "http://10.20.30.113:9010",
+            ws: true,
+          },
+          "/internal": {
+            changeOrigin: true,
+            target: "http://10.20.30.113:9010",
+            ws: true,
+          },
+          "/socket.io": {
             changeOrigin: true,
             target: "http://10.20.30.113:9010",
             ws: true,

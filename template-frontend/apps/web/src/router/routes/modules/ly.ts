@@ -2,15 +2,6 @@ import type { RouteRecordRaw } from 'vue-router';
 
 const routes: RouteRecordRaw[] = [
   {
-    name: 'Ly',
-    path: '/ly',
-    redirect: '/ly/overview/om',
-    meta: {
-      hideInMenu: true,
-      title: '流量分析',
-    },
-  },
-  {
     name: 'LyOverview',
     path: '/ly/overview',
     redirect: '/ly/overview/om',

@@ -17,7 +17,7 @@ import {
   lyUserApi,
   lyWhitelistApi,
 } from '#/api/ly';
-import { normalizeLyEvents } from '#/utils/ly';
+import { MOCK_LY_EVENTS, normalizeLyEvents } from '#/utils/ly';
 
 export const useLyStore = defineStore('ly', {
   state: () => ({
@@ -43,7 +43,11 @@ export const useLyStore = defineStore('ly', {
       this.loading = true;
       try {
         const data = await lyEventGet(params);
-        this.events = normalizeLyEvents(Array.isArray(data) ? data : []);
+        const source = Array.isArray(data) && data.length > 0 ? data : MOCK_LY_EVENTS;
+        this.events = normalizeLyEvents(source);
+        return this.events;
+      } catch {
+        this.events = normalizeLyEvents(MOCK_LY_EVENTS);
         return this.events;
       } finally {
         this.loading = false;

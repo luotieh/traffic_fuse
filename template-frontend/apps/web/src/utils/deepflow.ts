@@ -64,12 +64,30 @@ export function normalizeMessageContent(raw: any): Record<string, any> {
   if (typeof raw === 'string') {
     try {
       const parsed = JSON.parse(raw);
-      return typeof parsed === 'object' && parsed ? parsed : { text: raw };
+      return typeof parsed === 'object' && parsed ? normalizeMessageContent(parsed) : { text: raw };
     } catch {
       return { text: raw };
     }
   }
-  if (typeof raw === 'object') return raw;
+  if (typeof raw === 'object') {
+    const normalized = Array.isArray(raw) ? [...raw] : { ...raw };
+    Object.keys(normalized).forEach((key) => {
+      const value = normalized[key];
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          if (typeof parsed === 'object' && parsed !== null) {
+            normalized[key] = normalizeMessageContent(parsed);
+          }
+        } catch {
+          // Keep non-JSON strings as-is.
+        }
+      } else if (typeof value === 'object' && value !== null) {
+        normalized[key] = normalizeMessageContent(value);
+      }
+    });
+    return normalized;
+  }
   return { text: String(raw) };
 }
 
@@ -97,7 +115,20 @@ export function getMessageDisplay(message: Record<string, any>) {
 
   function listItems(title: string, items: any[], mapper: (item: any, index: number) => string) {
     if (!items.length) return '';
-    return `${title}\n\n${items.map(mapper).join('\n\n')}`;
+    return `**${title}**\n\n${items.map(mapper).join('\n\n')}`;
+  }
+
+  function statusIcon(status?: string) {
+    if (status === 'completed') return '✅';
+    if (status === 'failed') return '❌';
+    return '⏳';
+  }
+
+  function formatParams(params: any) {
+    if (!params || typeof params !== 'object') return '';
+    return Object.entries(params)
+      .map(([key, value]) => `     - ${key}: ${textFromAny(value)}`)
+      .join('\n');
   }
 
   const ctx =
@@ -130,51 +161,90 @@ export function getMessageDisplay(message: Record<string, any>) {
 
     if (messageType === 'action_created' || Array.isArray(sourceData?.actions)) {
       return listItems('已创建动作', sourceData?.actions || [], (action, index) => {
-        return `${index + 1}. ${action.action_name || '-'}\n类型: ${action.action_type || '-'}\n执行者: ${getRoleName(action.action_assignee)}\n状态: ${action.action_status || '-'}`;
+        return `${index + 1}. ${statusIcon(action.action_status)} ${action.action_name || '-'}\n   - 类型: ${action.action_type || '-'}\n   - 执行者: ${getRoleName(action.action_assignee)}\n   - 状态: ${action.action_status || '-'}`;
       });
     }
 
     if (messageType === 'command_created' || Array.isArray(sourceData?.commands)) {
       return listItems('已准备命令', sourceData?.commands || [], (command, index) => {
         const params = command.command_params?.data
-          ? `\n参数: ${textFromAny(command.command_params.data)}`
+          ? `\n   - 参数:\n${formatParams(command.command_params.data)}`
           : '';
-        return `${index + 1}. ${command.command_name || '-'}\n类型: ${command.command_type || '-'}\n执行者: ${getRoleName(command.command_assignee)}\n状态: ${command.command_status || '-'}${params}`;
+        return `${index + 1}. ${statusIcon(command.command_status)} ${command.command_name || '-'}\n   - 类型: ${command.command_type || '-'}\n   - 执行者: ${getRoleName(command.command_assignee)}\n   - 状态: ${command.command_status || '-'}${params}`;
       });
     }
 
     if (messageType === 'command_result' || Array.isArray(sourceData?.executions)) {
       return listItems('执行结果', sourceData?.executions || [], (execution, index) => {
-        const result = execution.execution_result?.data
-          ? `\n结果: ${textFromAny(execution.execution_result.data)}`
-          : '';
-        return `${index + 1}. ${execution.command_name || '-'}\n状态: ${execution.execution_status || '-'}${execution.execution_summary ? `\n摘要: ${execution.execution_summary}` : ''}${result}`;
+        const lines = [
+          `${index + 1}. ${statusIcon(execution.execution_status)} ${execution.command_name || '-'}`,
+          `   - 状态: ${execution.execution_status || '-'}`,
+        ];
+        if (execution.execution_summary) {
+          lines.push(`   - 摘要: ${execution.execution_summary}`);
+        }
+        const result = execution.execution_result?.data;
+        if (result) {
+          const verdictIcon =
+            result.verdict === 'suspicious' ? '⚠️' : result.verdict === 'malicious' ? '🚨' : 'ℹ️';
+          if (result.verdict) lines.push(`   - 判定: ${verdictIcon} ${result.verdict}`);
+          if (result.summary) lines.push(`   - 结果: ${result.summary}`);
+          if (Array.isArray(result.indicators) && result.indicators.length > 0) {
+            lines.push(`   - 指标: ${result.indicators.join(', ')}`);
+          }
+        }
+        const params = execution.command_params?.data;
+        if (params) {
+          lines.push(`   - 参数:\n${formatParams(params)}`);
+        }
+        return lines.join('\n');
       });
     }
 
     if (messageType === 'event_summary' || Array.isArray(sourceData?.summaries)) {
       const summaries = Array.isArray(sourceData?.summaries)
-        ? sourceData.summaries.map((item: any) => `- ${textFromAny(item)}`).join('\n')
+        ? `**事件总结**\n\n${sourceData.summaries.map((item: any) => `- ${textFromAny(item)}`).join('\n')}`
         : '';
       const suggestions = Array.isArray(sourceData?.suggestions)
-        ? `\n\n建议\n${sourceData.suggestions.map((item: any) => `- ${textFromAny(item)}`).join('\n')}`
+        ? `**建议**\n\n${sourceData.suggestions.map((item: any) => `💡 ${textFromAny(item)}`).join('\n')}`
         : '';
-      return [summaries, suggestions].filter(Boolean).join('');
+      return [summaries, suggestions].filter(Boolean).join('\n\n');
     }
 
     if (messageType === 'captain_llm_request' || sourceData?.type === 'llm_request') {
       return [
-        sourceData?.request?.message ? `事件描述\n${sourceData.request.message}` : '',
+        sourceData?.request?.message ? `**事件描述**\n${sourceData.request.message}` : '',
         Array.isArray(sourceData?.request?.observables)
-          ? `观测指标\n${sourceData.request.observables
+          ? `**观测指标**\n${sourceData.request.observables
               .map((item: any) => `- ${item.type}: ${item.value} (${item.role})`)
               .join('\n')}`
           : '',
-        sourceData?.system_prompt ? `系统提示\n${sourceData.system_prompt}` : '',
-        sourceData?.background?.security ? `组织背景\n${sourceData.background.security}` : '',
+        sourceData?.system_prompt ? `**系统提示**\n${sourceData.system_prompt}` : '',
+        sourceData?.background?.playbooks
+          ? `**可用剧本**\n\`\`\`yaml\n${sourceData.background.playbooks}\n\`\`\``
+          : '',
+        sourceData?.background?.security ? `**组织背景**\n${sourceData.background.security}` : '',
       ]
         .filter(Boolean)
         .join('\n\n');
+    }
+
+    if (from === '_manager' && Array.isArray(sourceData?.actions)) {
+      return `安排动作：${sourceData.actions.length}项`;
+    }
+    if (from === '_operator' && Array.isArray(sourceData?.commands)) {
+      return `准备命令：${sourceData.commands.length}项`;
+    }
+    if (from === '_executor') {
+      const statusText =
+        sourceData?.status === 'completed'
+          ? '已完成'
+          : sourceData?.status === 'failed'
+            ? '失败'
+            : '执行中';
+      const commandName =
+        sourceData?.command_name || sourceData?.action_name || sourceData?.task_name || '任务';
+      return `${commandName}${statusText}`;
     }
 
     if (sourceContent?.data && typeof sourceContent.data === 'object') return '';

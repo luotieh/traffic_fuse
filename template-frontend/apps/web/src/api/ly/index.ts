@@ -1,4 +1,5 @@
-import { requestClient } from '#/api/request';
+import { preferences } from '@vben/preferences';
+import { useAccessStore } from '@vben/stores';
 
 export interface LyEventItem extends Record<string, any> {
   id: number | string;
@@ -19,8 +20,69 @@ export interface LyConfigItem extends Record<string, any> {
   id?: number | string;
 }
 
-function post<T = any>(url: string, data?: Record<string, any>) {
-  return requestClient.post<T>(url, data ?? {});
+async function parseResponse(response: Response) {
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (data?.code !== undefined) {
+    if (![0, 200, 2000].includes(data.code)) {
+      throw new Error(data.msg || data.message || 'Request failed');
+    }
+    return data.data !== undefined ? data.data : data;
+  }
+
+  if (data?.status !== undefined) {
+    if (data.status !== 'success') {
+      throw new Error(data.msg || data.message || 'Request failed');
+    }
+    return data.data !== undefined ? data.data : data;
+  }
+
+  return data;
+}
+
+function createHeaders() {
+  const accessStore = useAccessStore();
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  headers.set('Accept-Language', preferences.app.locale);
+
+  if (accessStore.accessToken) {
+    headers.set('Authorization', `Bearer ${accessStore.accessToken}`);
+  }
+
+  return headers;
+}
+
+async function post<T = any>(
+  url: string,
+  data?: Record<string, any>,
+  prefix = '/d',
+) {
+  const response = await fetch(`${prefix}${url}`, {
+    body: JSON.stringify(data ?? {}),
+    headers: createHeaders(),
+    method: 'POST',
+  });
+
+  return parseResponse(response) as Promise<T>;
+}
+
+async function postInternal<T = any>(url: string, data?: Record<string, any>) {
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  headers.set('X-API-Key', 'change-me-internal-key');
+
+  const response = await fetch(`/internal${url}`, {
+    body: JSON.stringify(data ?? {}),
+    headers,
+    method: 'POST',
+  });
+
+  return parseResponse(response) as Promise<T>;
 }
 
 export function lyEventGet(params?: Record<string, any>) {
@@ -46,7 +108,7 @@ export function lyFeatureMo(params?: Record<string, any>) {
 }
 
 export function lyEventPushToAi(data: Record<string, any>) {
-  return post('/event/push', data);
+  return postInternal('/event/push', data);
 }
 
 export function lyEventSearch(params?: Record<string, any>) {
