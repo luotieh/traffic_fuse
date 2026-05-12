@@ -33,9 +33,11 @@
     "@vben/types": "workspace:*",
     "@vben/utils": "workspace:*",
     "@vueuse/core": "catalog:",
+    "marked": "catalog:",
     "naive-ui": "catalog:",
     "pinia": "catalog:",
     "qrcode": "catalog:",
+    "socket.io-client": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:"
   }

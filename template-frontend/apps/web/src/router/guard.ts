@@ -52,6 +52,64 @@ function setupAccessGuard(router: Router) {
     const userStore = useUserStore();
     const authStore = useAuthStore();
 
+    // ★ 开发模式下跳过登录 - 临时修改
+    const SKIP_LOGIN = true;
+    if (SKIP_LOGIN) {
+      // 如果没有设置 token，先设置一个模拟 token
+      if (!accessStore.accessToken) {
+        accessStore.setAccessToken('skip-login-mock-token');
+      }
+
+      // 如果没有用户信息，设置模拟用户信息
+      if (!userStore.userInfo) {
+        const mockUserInfo = {
+          userId: 'mock-user-id',
+          username: 'admin',
+          realName: '管理员',
+          avatar: '',
+          email: 'admin@example.com',
+          phone: '',
+          roles: ['admin'],
+          homePath: '/ly/overview/om',
+        };
+        userStore.setUserInfo(mockUserInfo);
+      }
+
+      // 如果没有访问权限信息，生成模拟权限
+      if (!accessStore.isAccessChecked) {
+        try {
+          const userRoles = (userStore.userInfo?.roles as string[]) ?? ['admin'];
+
+          const { accessibleMenus, accessibleRoutes } = await generateAccess({
+            roles: userRoles,
+            router,
+            routes: accessRoutes,
+          });
+
+          accessStore.setAccessMenus(accessibleMenus);
+          accessStore.setAccessRoutes(accessibleRoutes);
+          accessStore.setIsAccessChecked(true);
+          accessStore.setAccessCodes(['*']);
+
+          // 如果是登录页，跳转到首页
+          if (to.path === LOGIN_PATH) {
+            return decodeURIComponent(
+              (to.query?.redirect as string) ||
+                userStore.userInfo?.homePath ||
+                preferences.app.defaultHomePath,
+            );
+          }
+          return {
+            ...router.resolve(to.fullPath),
+            replace: true,
+          };
+        } catch {
+          // 忽略错误
+        }
+      }
+      return true;
+    }
+
     if (coreRouteNames.includes(to.name as string)) {
       if (to.path === LOGIN_PATH && accessStore.accessToken) {
         return decodeURIComponent(
