@@ -1,4 +1,4 @@
-import { baseRequestClient, requestClient } from '#/api/request';
+import { baseRequestClient, requestClient } from "#/api/request";
 
 export namespace AuthApi {
   export interface LoginParams {
@@ -121,27 +121,55 @@ export namespace AuthApi {
 }
 
 export async function loginApi(data: AuthApi.LoginParams) {
-  return requestClient.post<AuthApi.LoginResult>('/auth/login', data);
+  return requestClient.post<AuthApi.LoginResult>("/auth/login", data);
 }
 
 export async function refreshTokenApi(): Promise<AuthApi.RefreshTokenResult> {
-  const refreshToken = localStorage.getItem('iam_refresh_token') || '';
-  const res = await baseRequestClient.post<{ code: number; data: AuthApi.RefreshTokenResult }>('/auth/refresh', {
+  const refreshToken = localStorage.getItem("iam_refresh_token") || "";
+  const res = await baseRequestClient.post<{
+    code: number;
+    data: AuthApi.RefreshTokenResult;
+  }>("/auth/refresh", {
     refresh_token: refreshToken,
   });
-  const envelope = (res as Record<string, unknown>).data as Record<string, unknown> | undefined;
+  const envelope = (res as Record<string, unknown>).data as
+    | Record<string, unknown>
+    | undefined;
   return (envelope?.data ?? envelope) as AuthApi.RefreshTokenResult;
 }
 
 export async function logoutApi() {
-  return requestClient.post('/auth/logout');
+  return requestClient.post("/auth/logout");
 }
 
 export async function getPermissionApi(appId?: string) {
-  const params = appId ? { app: appId } : {};
-  return requestClient.get<AuthApi.PermissionBundle>('/me/profile', {
-    params,
-  });
+  void appId;
+  // ★ 本地开发模式，直接返回模拟数据
+  console.warn("[Permission] 本地开发模式，不调用/me/profile接口");
+  return {
+    user: {
+      user_id: "mock-user-id",
+      user_name: "admin",
+      nick_name: "管理员",
+      avatar: "",
+      email: "admin@example.com",
+      phone: "",
+      status: 1,
+      mfa: 0,
+      primary_organize_id: "",
+      primary_department_id: "",
+    },
+    roles: [{ id: "1", name: "admin", code: "admin" }],
+    applications: [],
+    organizes: [],
+    departments: [],
+    positions: [],
+    generated_at: new Date().toISOString(),
+  };
+  // const params = appId ? { app: appId } : {};
+  // return requestClient.get<AuthApi.PermissionBundle>('/me/profile', {
+  //   params,
+  // });
 }
 
 /**
@@ -149,8 +177,12 @@ export async function getPermissionApi(appId?: string) {
  *   GET /me/menus?app_id=
  */
 export async function getUserMenusApi(appId?: string) {
-  const params = appId ? { app_id: appId } : {};
-  return requestClient.get<AuthApi.MenuGroup[]>('/me/menus', { params });
+  void appId;
+  // ★ 本地开发模式，直接返回空菜单组，不调用后端接口
+  console.warn("[UserMenus] 本地开发模式，不调用/me/menus接口");
+  return [];
+  // const params = appId ? { app_id: appId } : {};
+  // return requestClient.get<AuthApi.MenuGroup[]>('/me/menus', { params });
 }
 
 /**
@@ -163,38 +195,41 @@ export async function getUserMenusApi(appId?: string) {
  * 避免在 /me/profile 上重复传输菜单数据。
  */
 export async function getAccessCodesApi() {
-  try {
-    const [bundle, menuGroups] = await Promise.all([
-      getPermissionApi(),
-      getUserMenusApi(),
-    ]);
+  // ★ 临时修改：不调用后端，直接返回通配符权限，用于本地开发
+  console.warn("[AccessCodes] 本地开发模式，返回通配符权限");
+  return ["*"];
+  // try {
+  //   const [bundle, menuGroups] = await Promise.all([
+  //     getPermissionApi(),
+  //     getUserMenusApi(),
+  //   ]);
 
-    const codes = new Set<string>();
-    if (bundle?.roles) {
-      for (const role of bundle.roles) {
-        if (role?.code) codes.add(String(role.code));
-        if (role?.name) codes.add(String(role.name));
-      }
-    }
+  //   const codes = new Set<string>();
+  //   if (bundle?.roles) {
+  //     for (const role of bundle.roles) {
+  //       if (role?.code) codes.add(String(role.code));
+  //       if (role?.name) codes.add(String(role.name));
+  //     }
+  //   }
 
-    const walk = (list: AuthApi.VisibleMenu[]) => {
-      for (const node of list || []) {
-        if (!node) continue;
-        if (node.unique_value) codes.add(String(node.unique_value));
-        if (node.path) codes.add(String(node.path));
-        if (node.name) codes.add(String(node.name));
-        if (Array.isArray(node.children)) walk(node.children);
-        if (Array.isArray(node.buttons)) walk(node.buttons);
-      }
-    };
+  //   const walk = (list: AuthApi.VisibleMenu[]) => {
+  //     for (const node of list || []) {
+  //       if (!node) continue;
+  //       if (node.unique_value) codes.add(String(node.unique_value));
+  //       if (node.path) codes.add(String(node.path));
+  //       if (node.name) codes.add(String(node.name));
+  //       if (Array.isArray(node.children)) walk(node.children);
+  //       if (Array.isArray(node.buttons)) walk(node.buttons);
+  //     }
+  //   };
 
-    for (const group of menuGroups || []) {
-      if (group?.menus) walk(group.menus);
-    }
+  //   for (const group of menuGroups || []) {
+  //     if (group?.menus) walk(group.menus);
+  //   }
 
-    return [...codes];
-  } catch {
-    console.warn('[AccessCodes] IAM 接口不可用，返回空权限码');
-    return [];
-  }
+  //   return [...codes];
+  // } catch {
+  //   console.warn('[AccessCodes] IAM 接口不可用，返回空权限码');
+  //   return [];
+  // }
 }

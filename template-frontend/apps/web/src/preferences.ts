@@ -7,7 +7,8 @@ import { defineOverridesPreferences } from '@vben/preferences';
  */
 export const overridesPreferences = defineOverridesPreferences({
   app: {
-    accessMode: 'backend',
+    accessMode: 'frontend',
+    defaultHomePath: '/ly/overview/om',
     name: import.meta.env.VITE_APP_TITLE,
   },
   logo: {
