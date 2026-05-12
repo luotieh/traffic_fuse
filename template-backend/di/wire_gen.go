@@ -28,7 +28,7 @@ func InitializeHandlers() *Handlers {
 	catHandler := category.NewHandlerCategory(catSvc)
 
 	exampleModule := example.NewExample(handler, catHandler, database)
-	trafficModule := traffic.NewTraffic()
+	trafficModule := traffic.NewTraffic(cfg.Traffic)
 
 	return &Handlers{
 		Config:  cfg,

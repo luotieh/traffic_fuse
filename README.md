@@ -87,12 +87,12 @@ port  = 8090          # 你的本地端口
 debug = true
 
 [db]
-driver   = "mysql"
-host     = "127.0.0.1"
-port     = 3306
-user     = "root"
-password = "123456"
-database = "order_db"  # 你的数据库
+db-type = "mysql"
+host    = "127.0.0.1"
+port    = 3306
+user    = "root"
+passwd  = "123456"
+dbname  = "order_db"  # 你的数据库
 
 [iam]
 base_url      = "http://localhost:8080"     # IAM 地址
@@ -104,6 +104,13 @@ callback_uri             = "http://localhost:8090/callback"
 success_redirect         = "http://localhost:8090/auth/sso-callback"
 cookie_secret            = "at-least-16-bytes-secret-key!!"
 token_relay_callback_uri = "http://localhost:8090/callback"
+
+[traffic]
+store_backend = "postgres"
+database_url = "postgres://traffic:traffic@127.0.0.1:5432/traffic_analysis?sslmode=disable"
+auto_migrate = true
+mq_backend = "rabbitmq"
+rabbitmq_url = "amqp://traffic:traffic@127.0.0.1:5672/"
 ```
 
 ### 5. 安装依赖 & 启动

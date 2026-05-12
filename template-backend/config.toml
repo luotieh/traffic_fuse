@@ -4,12 +4,12 @@ port  = 8090
 debug = true
 
 [db]
-driver   = "mysql"
-host     = "127.0.0.1"
-port     = 3306
-user     = "root"
-password = "123456"
-database = "my_biz"
+db-type = "mysql"
+host    = "127.0.0.1"
+port    = 3306
+user    = "root"
+passwd  = "123456"
+dbname  = "my_biz"
 
 [cache]
 # host = "127.0.0.1"
@@ -30,3 +30,28 @@ callback_uri             = "http://localhost:8090/callback"
 success_redirect         = "http://localhost:8090/auth/sso-callback"
 cookie_secret            = "at-least-16-bytes-secret-key!!"
 token_relay_callback_uri = "http://localhost:8090/callback"
+
+[traffic]
+store_backend = "postgres"
+database_url = "postgres://traffic:traffic@127.0.0.1:5432/traffic_analysis?sslmode=disable"
+auto_migrate = true
+internal_api_key = "change-me-internal-key"
+flowshadow_base_url = "http://127.0.0.1:18080"
+flowshadow_api_key = ""
+deepsoc_base_url = ""
+deepsoc_username = "admin"
+deepsoc_password = "admin"
+deepsoc_api_key = ""
+llm_base_url = ""
+llm_api_key = ""
+llm_model = "deepseek-chat"
+llm_timeout_seconds = 60
+sync_batch_size = 200
+sync_lookback_seconds = 600
+sync_max_retries = 5
+http_timeout_seconds = 15
+mq_backend = "rabbitmq"
+rabbitmq_url = "amqp://traffic:traffic@127.0.0.1:5672/"
+rabbitmq_exchange = "traffic.events"
+rabbitmq_event_queue = "traffic.events.default"
+rabbitmq_consumer_enabled = true

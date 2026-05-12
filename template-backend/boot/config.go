@@ -6,6 +6,8 @@ import (
 	"code.yt-security.com/public/core/v2/db"
 	"code.yt-security.com/public/core/v2/os/qcfg"
 	"code.yt-security.com/public/core/v2/web"
+
+	"my-biz-backend/traffic"
 )
 
 type IAMConfig struct {
@@ -32,11 +34,12 @@ type SSOConfig struct {
 }
 
 type Config struct {
-	Web   web.Config  `json:"web" toml:"web"`
-	DB    db.Config   `json:"db" toml:"db"`
-	Cache CacheConfig `json:"cache" toml:"cache"`
-	IAM   IAMConfig   `json:"iam" toml:"iam"`
-	SSO   SSOConfig   `json:"sso" toml:"sso"`
+	Web     web.Config     `json:"web" toml:"web"`
+	DB      db.Config      `json:"db" toml:"db"`
+	Cache   CacheConfig    `json:"cache" toml:"cache"`
+	IAM     IAMConfig      `json:"iam" toml:"iam"`
+	SSO     SSOConfig      `json:"sso" toml:"sso"`
+	Traffic traffic.Config `json:"traffic" toml:"traffic"`
 }
 
 func LoadConfig() *Config {

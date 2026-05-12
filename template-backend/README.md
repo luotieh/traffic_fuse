@@ -77,17 +77,24 @@ port  = 8090
 debug = true
 
 [db]
-driver   = "mysql"
-host     = "127.0.0.1"
-port     = 3306
-user     = "root"
-password = "123456"
-database = "my_biz"
+db-type = "mysql"
+host    = "127.0.0.1"
+port    = 3306
+user    = "root"
+passwd  = "123456"
+dbname  = "my_biz"
 
 [iam]
 base_url      = "http://localhost:8080"
 client_id     = "your-client-id"
 client_secret = "your-client-secret"
+
+[traffic]
+store_backend = "postgres"
+database_url = "postgres://traffic:traffic@127.0.0.1:5432/traffic_analysis?sslmode=disable"
+auto_migrate = true
+mq_backend = "rabbitmq"
+rabbitmq_url = "amqp://traffic:traffic@127.0.0.1:5672/"
 ```
 
 ```bash
@@ -96,6 +103,8 @@ make build          # 编译（注入构建信息）
 make wire           # 重新生成 Wire
 make docker-build   # Docker
 ```
+
+> `traffic` 为 DeepSOC/traffic-analysis 业务模块配置；模板自身启动仍依赖 `[db]` 和 `[iam]`。如果启用 `store_backend = "postgres"` 或 `mq_backend = "rabbitmq"`，对应 PostgreSQL/RabbitMQ 服务需要可连接。
 
 ## 完整鉴权能力
 

@@ -19,6 +19,7 @@ func InitializeHandlers() *Handlers {
 		boot.LoadDB,
 		boot.LoadIAM,
 		example.WireSet,
+		wire.FieldsOf(new(*boot.Config), "Traffic"),
 		traffic.WireSet,
 		wire.Struct(new(Handlers), "Config", "Web", "DB", "Cache", "Product", "IAM", "Example", "Traffic"),
 	)

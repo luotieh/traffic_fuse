@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"my-biz-backend/traffic/internal/client"
 	"my-biz-backend/traffic/internal/config"
@@ -26,8 +27,34 @@ type Traffic struct {
 	queue   mq.Queue
 }
 
-func NewTraffic() *Traffic {
-	cfg := config.Load()
+type Config struct {
+	StoreBackend            string `json:"store_backend" toml:"store_backend"`
+	DatabaseURL             string `json:"database_url" toml:"database_url"`
+	AutoMigrate             bool   `json:"auto_migrate" toml:"auto_migrate"`
+	InternalAPIKey          string `json:"internal_api_key" toml:"internal_api_key"`
+	FlowShadowBaseURL       string `json:"flowshadow_base_url" toml:"flowshadow_base_url"`
+	FlowShadowAPIKey        string `json:"flowshadow_api_key" toml:"flowshadow_api_key"`
+	DeepSOCBaseURL          string `json:"deepsoc_base_url" toml:"deepsoc_base_url"`
+	DeepSOCUsername         string `json:"deepsoc_username" toml:"deepsoc_username"`
+	DeepSOCPassword         string `json:"deepsoc_password" toml:"deepsoc_password"`
+	DeepSOCAPIKey           string `json:"deepsoc_api_key" toml:"deepsoc_api_key"`
+	LLMBaseURL              string `json:"llm_base_url" toml:"llm_base_url"`
+	LLMAPIKey               string `json:"llm_api_key" toml:"llm_api_key"`
+	LLMModel                string `json:"llm_model" toml:"llm_model"`
+	LLMTimeoutSeconds       int    `json:"llm_timeout_seconds" toml:"llm_timeout_seconds"`
+	SyncBatchSize           int    `json:"sync_batch_size" toml:"sync_batch_size"`
+	SyncLookbackSeconds     int    `json:"sync_lookback_seconds" toml:"sync_lookback_seconds"`
+	SyncMaxRetries          int    `json:"sync_max_retries" toml:"sync_max_retries"`
+	HTTPTimeoutSeconds      int    `json:"http_timeout_seconds" toml:"http_timeout_seconds"`
+	MQBackend               string `json:"mq_backend" toml:"mq_backend"`
+	RabbitMQURL             string `json:"rabbitmq_url" toml:"rabbitmq_url"`
+	RabbitMQExchange        string `json:"rabbitmq_exchange" toml:"rabbitmq_exchange"`
+	RabbitMQEventQueue      string `json:"rabbitmq_event_queue" toml:"rabbitmq_event_queue"`
+	RabbitMQConsumerEnabled bool   `json:"rabbitmq_consumer_enabled" toml:"rabbitmq_consumer_enabled"`
+}
+
+func NewTraffic(moduleCfg Config) *Traffic {
+	cfg := moduleCfg.toInternal()
 	httpClient := &http.Client{Timeout: cfg.HTTPTimeout}
 	llmHTTPClient := &http.Client{Timeout: cfg.LLMTimeout}
 
@@ -75,6 +102,76 @@ func loadStore(cfg config.Config) store.Store {
 	default:
 		return store.NewMemoryStore()
 	}
+}
+
+func (c Config) toInternal() config.Config {
+	cfg := config.Load()
+	if c.StoreBackend != "" {
+		cfg.StoreBackend = strings.ToLower(c.StoreBackend)
+	}
+	if c.DatabaseURL != "" {
+		cfg.DatabaseURL = c.DatabaseURL
+	}
+	cfg.AutoMigrate = c.AutoMigrate
+	if c.InternalAPIKey != "" {
+		cfg.InternalAPIKey = c.InternalAPIKey
+	}
+	if c.FlowShadowBaseURL != "" {
+		cfg.FlowShadowBaseURL = c.FlowShadowBaseURL
+	}
+	if c.FlowShadowAPIKey != "" {
+		cfg.FlowShadowAPIKey = c.FlowShadowAPIKey
+	}
+	if c.DeepSOCBaseURL != "" {
+		cfg.DeepSOCBaseURL = c.DeepSOCBaseURL
+	}
+	if c.DeepSOCUsername != "" {
+		cfg.DeepSOCUsername = c.DeepSOCUsername
+	}
+	if c.DeepSOCPassword != "" {
+		cfg.DeepSOCPassword = c.DeepSOCPassword
+	}
+	if c.DeepSOCAPIKey != "" {
+		cfg.DeepSOCAPIKey = c.DeepSOCAPIKey
+	}
+	if c.LLMBaseURL != "" {
+		cfg.LLMBaseURL = c.LLMBaseURL
+	}
+	if c.LLMAPIKey != "" {
+		cfg.LLMAPIKey = c.LLMAPIKey
+	}
+	if c.LLMModel != "" {
+		cfg.LLMModel = c.LLMModel
+	}
+	if c.LLMTimeoutSeconds > 0 {
+		cfg.LLMTimeout = time.Duration(c.LLMTimeoutSeconds) * time.Second
+	}
+	if c.SyncBatchSize > 0 {
+		cfg.SyncBatchSize = c.SyncBatchSize
+	}
+	if c.SyncLookbackSeconds > 0 {
+		cfg.SyncLookbackSeconds = c.SyncLookbackSeconds
+	}
+	if c.SyncMaxRetries > 0 {
+		cfg.SyncMaxRetries = c.SyncMaxRetries
+	}
+	if c.HTTPTimeoutSeconds > 0 {
+		cfg.HTTPTimeout = time.Duration(c.HTTPTimeoutSeconds) * time.Second
+	}
+	if c.MQBackend != "" {
+		cfg.MQBackend = strings.ToLower(c.MQBackend)
+	}
+	if c.RabbitMQURL != "" {
+		cfg.RabbitMQURL = c.RabbitMQURL
+	}
+	if c.RabbitMQExchange != "" {
+		cfg.RabbitMQExchange = c.RabbitMQExchange
+	}
+	if c.RabbitMQEventQueue != "" {
+		cfg.RabbitMQEventQueue = c.RabbitMQEventQueue
+	}
+	cfg.RabbitMQConsumerEnabled = c.RabbitMQConsumerEnabled
+	return cfg
 }
 
 func loadQueue(cfg config.Config, st store.Store) mq.Queue {
